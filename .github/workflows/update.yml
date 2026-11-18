@@ -1,0 +1,39 @@
+name: 每日自動更新都更標案與新聞
+
+on:
+  schedule:
+    # 每天台灣時間清晨 06:00 (UTC 22:00) 自動執行一次
+    - cron: '0 22 * * *'
+  # 允許您在 GitHub 網頁上手動隨時按「Run workflow」觸發
+  workflow_dispatch:
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 允許 Action 自動寫入並更新 data.json
+
+    steps:
+      - name: 簽出程式庫
+        uses: actions/checkout@v4
+
+      - name: 設定 Python 環境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 安裝所需依賴
+        run: |
+          pip install -r requirements.txt
+
+      - name: 執行爬蟲腳本
+        run: |
+          python scraper.py
+
+      - name: 檢查並自動推播更新
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          git add data.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "自動更新：國土署最新都更標案與新聞 [skip ci]" && git push)
