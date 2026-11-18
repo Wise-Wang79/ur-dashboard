@@ -2883,7 +2883,63 @@
         appState.tenders = filterDuplicateTenders(JSON.parse(JSON.stringify(DEFAULT_TENDERS)));
         appState.newsFeed = JSON.parse(JSON.stringify(DEFAULT_NEWS_FEED));
       }
+      // -----------------------------------------------------------------
+      // 【新增】自動讀取 GitHub Actions 每日產生的 data.json
+      // -----------------------------------------------------------------
+      try {
+        const resp = await fetch('./data.json?t=' + new Date().getTime());
+        if (resp.ok) {
+          const data = await resp.json();
+          // 1. 載入爬蟲抓取的最新都更標案，並進行去重歸戶
+          if (data.projects && data.projects.length > 0) {
+            const incomingTenders = data.projects.map(p => ({
+              caseId: p.case_id || p.id || 'UR-最新',
+              city: p.city || '其他縣市',
+              title: p.name || p.title || '最新公辦都更案件',
+              organizer: p.organizer || '各縣市都更專責機關 / 住都中心',
+              method: '權利變換',
+              stage: p.current_status || '招商中',
+              announcementRound: 1,
+              date: p.publish_date || '',
+              deadline: p.deadline || '請參閱官方公告',
+              areaPing: p.areaPing || '依公告為準',
+              publicRatio: '公有地為主',
+              zone: '都市更新地區',
+              investment: '依招商須知',
+              officialRef: p.source_url || '內政部國土署公開評選平台',
+              history: Array.isArray(p.history) 
+                ? p.history.map(h => ({ round: 1, type: p.current_status || '公告', date: p.publish_date, desc: h })) 
+                : [],
+              committee: [],
+              news: []
+            }));
+            // 將今天最新爬到的資料排在前面，並透過複合鍵與既有資料去重
+            appState.tenders = filterDuplicateTenders([...incomingTenders, ...appState.tenders]);
+          }
 
+          // 2. 載入最新都更新聞
+          if (data.news && data.news.length > 0) {
+            const incomingNews = data.news.map((n, idx) => ({
+              id: 'news-auto-' + idx,
+              category: '公辦都更',
+              title: n.title,
+              source: n.source || '即時快訊',
+              date: n.date || '',
+              caseId: '',
+              summary: n.title
+            }));
+            appState.newsFeed = incomingNews;
+          }
+
+          // 3. 更新儀表板頂部的更新狀態文字
+          if (data.updated_at) {
+            appState.dataSourceLabel = `GitHub Actions 自動同步（更新於 ${data.updated_at}）`;
+          }
+        }
+      } catch (e) {
+        console.log('未偵測到 data.json 或讀取失敗，維持使用內建基準庫。');
+      }
+      // -----------------------------------------------------------------
       const kwEl = document.getElementById(`search-input`);
       const stEl = document.getElementById(`stage-select`);
       const winEl = document.getElementById(`window-select`);
